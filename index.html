@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IsoEngine — Tilted Map Game</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #1a1a2e; --panel: #16213e; --accent: #0f3460;
+    --green: #4ade80; --amber: #fbbf24; --red: #f87171;
+    --blue: #60a5fa; --purple: #c084fc; --text: #e2e8f0;
+    --muted: #94a3b8; --border: rgba(255,255,255,0.1);
+  }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; user-select: none; }
+
+  #app { display: grid; grid-template-columns: 220px 1fr; grid-template-rows: 48px 1fr 48px; height: 100vh; }
+
+  /* TOPBAR */
+  #topbar { grid-column: 1/-1; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; padding: 0 16px; }
+  #topbar h1 { font-size: 15px; font-weight: 700; letter-spacing: 0.05em; color: var(--green); margin-right: 8px; }
+  .tab-btn { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 5px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all .15s; }
+  .tab-btn.active, .tab-btn:hover { background: var(--accent); color: var(--text); border-color: var(--blue); }
+  #mode-label { margin-left: auto; font-size: 12px; color: var(--muted); background: var(--accent); padding: 3px 10px; border-radius: 99px; }
+
+  /* SIDEBAR */
+  #sidebar { background: var(--panel); border-right: 1px solid var(--border); padding: 12px 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 4px; }
+  .tile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .tile-btn { aspect-ratio: 1; border-radius: 8px; border: 2px solid transparent; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 11px; transition: all .15s; padding: 4px; }
+  .tile-btn span { font-size: 20px; line-height: 1; }
+  .tile-btn.selected { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+  .tile-btn:hover { border-color: var(--muted); }
+  .action-btn { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--accent); color: var(--text); cursor: pointer; font-size: 12px; font-weight: 600; transition: all .15s; }
+  .action-btn:hover { background: #1e4080; }
+  .action-btn.danger { background: rgba(248,113,113,0.15); border-color: var(--red); color: var(--red); }
+  .kbd { display: inline-block; background: var(--accent); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 10px; font-family: monospace; color: var(--muted); margin: 2px; }
+  .npc-status { background: rgba(192,132,252,0.1); border: 1px solid rgba(192,132,252,0.3); border-radius: 8px; padding: 8px 10px; font-size: 12px; }
+  .npc-line { color: var(--purple); font-weight: 600; margin-bottom: 4px; font-size: 11px; }
+
+  /* CANVAS AREA */
+  #canvas-area { position: relative; overflow: hidden; background: var(--bg); }
+  #gameCanvas { display: block; cursor: crosshair; }
+  #play-overlay { position: absolute; inset: 0; pointer-events: none; }
+  #tooltip { position: absolute; background: rgba(0,0,0,0.85); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-size: 12px; color: var(--text); pointer-events: none; display: none; z-index: 10; }
+  #speech-bubble { position: absolute; background: white; color: #1a1a2e; border-radius: 12px; padding: 8px 12px; font-size: 13px; font-weight: 600; pointer-events: none; display: none; z-index: 20; max-width: 180px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+  #speech-bubble::after { content: ''; position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); border: 8px solid transparent; border-top-color: white; border-bottom: 0; }
+
+  /* STATUSBAR */
+  #statusbar { grid-column: 1/-1; background: var(--panel); border-top: 1px solid var(--border); display: flex; align-items: center; gap: 16px; padding: 0 16px; font-size: 12px; color: var(--muted); }
+  .status-item { display: flex; align-items: center; gap: 5px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .dot.green { background: var(--green); }
+  .dot.blue { background: var(--blue); }
+  .dot.purple { background: var(--purple); }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- TOPBAR -->
+  <div id="topbar">
+    <h1>⬡ IsoEngine</h1>
+    <button class="tab-btn active" id="btn-edit" onclick="setMode('edit')">✏️ Edit</button>
+    <button class="tab-btn" id="btn-play" onclick="setMode('play')">▶ Play</button>
+    <button class="tab-btn" id="btn-drag" onclick="setMode('drag')">☰ Drag & Drop</button>
+    <span id="mode-label">Edit Mode</span>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <div>
+      <div class="section-title">Tiles</div>
+      <div class="tile-grid" id="tile-palette"></div>
+    </div>
+    <div>
+      <div class="section-title">Level</div>
+      <button class="action-btn" onclick="generateLevel()">🎲 Random Level</button>
+      <button class="action-btn" style="margin-top:6px" onclick="clearLevel()">🗑 Clear</button>
+      <button class="action-btn danger" style="margin-top:6px" onclick="fillLevel()">⬜ Fill Ground</button>
+    </div>
+    <div id="drag-panel" style="display:none">
+      <div class="section-title">Drag & Drop</div>
+      <div style="font-size:12px; color:var(--muted); line-height:1.6">
+        Drag tiles from palette onto the map. Tiles snap to the isometric grid automatically.
+      </div>
+      <div id="drag-palette" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;"></div>
+    </div>
+    <div id="play-controls" style="display:none">
+      <div class="section-title">Controls</div>
+      <div style="font-size:12px; color:var(--muted); line-height:1.8">
+        Move: <span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span><br>
+        Or arrow keys.<br>
+        Talk to NPC: walk near it.<br>
+        Sprint: hold <span class="kbd">Shift</span>
+      </div>
+    </div>
+    <div id="npc-info" style="display:none">
+      <div class="section-title">NPC Status</div>
+      <div class="npc-status">
+        <div class="npc-line" id="npc-dialog-label">🧙 Waiting...</div>
+        <div id="npc-mood" style="font-size:12px; color:var(--muted)">Idle</div>
+      </div>
+    </div>
+    <div>
+      <div class="section-title">Camera</div>
+      <div style="font-size:12px; color:var(--muted); line-height:1.8">
+        Scroll: zoom<br>
+        Middle drag: pan<br>
+        <span class="kbd">R</span>: reset view
+      </div>
+    </div>
+  </div>
+
+  <!-- CANVAS -->
+  <div id="canvas-area">
+    <canvas id="gameCanvas"></canvas>
+    <div id="tooltip"></div>
+    <div id="speech-bubble"></div>
+  </div>
+
+  <!-- STATUSBAR -->
+  <div id="statusbar">
+    <div class="status-item"><div class="dot green"></div><span id="stat-tiles">0 tiles</span></div>
+    <div class="status-item"><div class="dot blue"></div><span id="stat-pos">Pos: 0,0</span></div>
+    <div class="status-item"><div class="dot purple"></div><span id="stat-npc">NPC: idle</span></div>
+    <div class="status-item" style="margin-left:auto"><span id="stat-fps">60 fps</span></div>
+    <div class="status-item"><span id="stat-zoom">100%</span></div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// TILE DEFINITIONS
+// ============================================================
+const TILES = [
+  { id: 'grass',  label: 'Grass',  emoji: '🌿', top: '#5a9e4f', side: '#3d6e35', walkable: true },
+  { id: 'stone',  label: 'Stone',  emoji: '🪨', top: '#888',    side: '#555',    walkable: true },
+  { id: 'water',  label: 'Water',  emoji: '💧', top: '#4090cc', side: '#2060aa', walkable: false },
+  { id: 'sand',   label: 'Sand',   emoji: '🏖', top: '#d4a84b', side: '#a87c30', walkable: true },
+  { id: 'tree',   label: 'Tree',   emoji: '🌲', top: '#3a7d44', side: '#2a5a30', walkable: false, tall: true },
+  { id: 'path',   label: 'Path',   emoji: '🔶', top: '#c8a060', side: '#8a6a40', walkable: true },
+  { id: 'lava',   label: 'Lava',   emoji: '🌋', top: '#e05020', side: '#902010', walkable: false },
+  { id: 'ice',    label: 'Ice',    emoji: '❄️', top: '#a0d8ef', side: '#70b0d0', walkable: true },
+  { id: 'void',   label: 'Erase',  emoji: '✖',  top: null,      side: null,      walkable: false },
+];
+
+// ============================================================
+// GRID / MAP STATE
+// ============================================================
+const COLS = 16, ROWS = 16;
+const TW = 64, TH = 32, TD = 18; // tile width, height, depth
+
+let map = Array.from({length: ROWS}, () => Array(COLS).fill('grass'));
+let selectedTile = 'grass';
+let mode = 'edit'; // 'edit' | 'play' | 'drag'
+let camera = { x: 0, y: 0, zoom: 1 };
+
+// ============================================================
+// CHARACTER + NPC
+// ============================================================
+const player = { gx: 7, gy: 7, px: 0, py: 0, facing: 'se', moving: false, animFrame: 0, color: '#60a5fa' };
+const npc     = { gx: 10, gy: 5, color: '#c084fc', dialog: 0 };
+
+const NPC_DIALOGS = [
+  "Hey adventurer! Welcome to IsoEngine!",
+  "You can edit the map with Edit mode.",
+  "Drag tiles onto the grid in Drag mode.",
+  "Use WASD or arrow keys to move!",
+  "I like this isometric world. 😊",
+  "The lava tiles look really hot!",
+  "Come back anytime, traveler!",
+];
+
+// ============================================================
+// INPUT STATE
+// ============================================================
+const keys = {};
+let mouseBtn = -1, lastMX = 0, lastMY = 0;
+let isPainting = false;
+let dragTileId = null, dragX = 0, dragY = 0;
+let speechTimeout = null;
+
+// ============================================================
+// CANVAS SETUP
+// ============================================================
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0;
+
+function resize() {
+  const area = document.getElementById('canvas-area');
+  W = canvas.width  = area.clientWidth;
+  H = canvas.height = area.clientHeight;
+  // center camera on first resize
+  if (camera.x === 0 && camera.y === 0) resetCamera();
+}
+
+function resetCamera() {
+  const iso = toISO(COLS/2, ROWS/2);
+  camera.x = W/2 - iso.x;
+  camera.y = H/2 - iso.y - 80;
+  camera.zoom = 1;
+}
+
+// ============================================================
+// ISOMETRIC MATH
+// ============================================================
+function toISO(gx, gy) {
+  return {
+    x: (gx - gy) * (TW / 2),
+    y: (gx + gy) * (TH / 2)
+  };
+}
+
+function toGrid(sx, sy) {
+  // screen → world (un-transform)
+  const wx = (sx - camera.x) / camera.zoom;
+  const wy = (sy - camera.y) / camera.zoom;
+  // iso → grid
+  const gx = (wx / (TW/2) + wy / (TH/2)) / 2;
+  const gy = (wy / (TH/2) - wx / (TW/2)) / 2;
+  return { gx: Math.floor(gx), gy: Math.floor(gy) };
+}
+
+function worldToScreen(wx, wy) {
+  return {
+    x: wx * camera.zoom + camera.x,
+    y: wy * camera.zoom + camera.y
+  };
+}
+
+// ============================================================
+// TILE DRAWING
+// ============================================================
+function drawTile(gx, gy, tileId, highlight) {
+  const t = TILES.find(t => t.id === tileId);
+  if (!t || tileId === 'void' || !t.top) return;
+
+  const iso = toISO(gx, gy);
+  const x = iso.x, y = iso.y;
+  const hw = TW/2, hh = TH/2, d = TD;
+
+  ctx.save();
+  ctx.translate(x, y);
+
+  // TOP FACE
+  ctx.beginPath();
+  ctx.moveTo(0, -hh); ctx.lineTo(hw, 0);
+  ctx.lineTo(0, hh);  ctx.lineTo(-hw, 0);
+  ctx.closePath();
+  ctx.fillStyle = highlight ? '#ffffff44' : t.top;
+  ctx.fill();
+  if (highlight) {
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5 / camera.zoom;
+    ctx.stroke();
+  }
+
+  // LEFT FACE
+  ctx.beginPath();
+  ctx.moveTo(-hw, 0); ctx.lineTo(0, hh);
+  ctx.lineTo(0, hh+d); ctx.lineTo(-hw, d);
+  ctx.closePath();
+  ctx.fillStyle = t.side + 'bb';
+  ctx.fill();
+
+  // RIGHT FACE
+  ctx.beginPath();
+  ctx.moveTo(hw, 0);  ctx.lineTo(0, hh);
+  ctx.lineTo(0, hh+d); ctx.lineTo(hw, d);
+  ctx.closePath();
+  ctx.fillStyle = t.side + '88';
+  ctx.fill();
+
+  // TALL TILE (tree)
+  if (t.tall) {
+    ctx.fillStyle = '#2a7a3a';
+    // trunk
+    ctx.fillRect(-4, -hh-12, 8, 14);
+    // canopy
+    ctx.beginPath();
+    ctx.arc(0, -hh-28, 18, 0, Math.PI*2);
+    ctx.fillStyle = '#3a9a48';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(-8, -hh-22, 13, 0, Math.PI*2);
+    ctx.fillStyle = '#2d7a3a';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(8, -hh-20, 12, 0, Math.PI*2);
+    ctx.fillStyle = '#4aaa58';
+    ctx.fill();
+  }
+
+  // WATER ANIMATION
+  if (tileId === 'water') {
+    const wave = Math.sin(Date.now()/600 + gx*0.8 + gy*0.6) * 0.15 + 0.85;
+    ctx.beginPath();
+    ctx.moveTo(0, -hh); ctx.lineTo(hw, 0);
+    ctx.lineTo(0, hh);  ctx.lineTo(-hw, 0);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(80,180,255,${wave * 0.3})`;
+    ctx.fill();
+  }
+
+  // LAVA ANIMATION
+  if (tileId === 'lava') {
+    const pulse = Math.sin(Date.now()/400 + gx + gy) * 0.2 + 0.4;
+    ctx.beginPath();
+    ctx.moveTo(0, -hh); ctx.lineTo(hw, 0);
+    ctx.lineTo(0, hh);  ctx.lineTo(-hw, 0);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(255,200,0,${pulse})`;
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// ============================================================
+// CHARACTER DRAWING
+// ============================================================
+function drawCharacter(px, py, color, isPlayer) {
+  const hw = TW/2, hh = TH/2;
+  const bounce = isPlayer && player.moving ? Math.sin(Date.now()/120) * 3 : 0;
+
+  ctx.save();
+  ctx.translate(px, py - hh - TD/2 + bounce);
+
+  // Shadow
+  ctx.save();
+  ctx.translate(0, hh + TD/2 - bounce);
+  ctx.scale(1, 0.3);
+  ctx.beginPath();
+  ctx.arc(0, 0, 10, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fill();
+  ctx.restore();
+
+  // Body
+  ctx.beginPath();
+  ctx.roundRect(-9, -18, 18, 20, 4);
+  ctx.fillStyle = color;
+  ctx.fill();
+
+  // Head
+  ctx.beginPath();
+  ctx.arc(0, -24, 10, 0, Math.PI*2);
+  ctx.fillStyle = isPlayer ? '#fde68a' : '#fcd5e8';
+  ctx.fill();
+
+  // Eyes
+  ctx.fillStyle = '#1a1a2e';
+  ctx.beginPath(); ctx.arc(-3, -26, 2, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 3, -26, 2, 0, Math.PI*2); ctx.fill();
+
+  // Legs (animated)
+  if (isPlayer && player.moving) {
+    const leg = Math.sin(Date.now()/120) * 5;
+    ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-4, 2); ctx.lineTo(-4, 10 + leg); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo( 4, 2); ctx.lineTo( 4, 10 - leg); ctx.stroke();
+  } else {
+    ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-4, 2); ctx.lineTo(-4, 10); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo( 4, 2); ctx.lineTo( 4, 10); ctx.stroke();
+  }
+
+  // NPC hat
+  if (!isPlayer) {
+    ctx.fillStyle = '#7c3aed';
+    ctx.beginPath();
+    ctx.ellipse(0, -33, 12, 4, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillRect(-7, -48, 14, 18); ctx.fill();
+    ctx.beginPath();
+    ctx.fillRect(-7, -48, 14, 18);
+    ctx.fillStyle = '#a855f7';
+    ctx.fillRect(-7, -48, 14, 18);
+  }
+
+  // Player indicator
+  if (isPlayer) {
+    ctx.fillStyle = '#60a5fa';
+    ctx.beginPath();
+    ctx.moveTo(0, -40); ctx.lineTo(-5, -48); ctx.lineTo(5, -48);
+    ctx.closePath(); ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// ============================================================
+// DRAG GHOST
+// ============================================================
+let dragGhost = null; // { gx, gy, tileId } or null
+
+// ============================================================
+// RENDER LOOP
+// ============================================================
+let fps = 60, frameCount = 0, lastFpsTime = performance.now();
+
+function render() {
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  ctx.fillStyle = '#0d0d1a';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.save();
+  ctx.translate(camera.x, camera.y);
+  ctx.scale(camera.zoom, camera.zoom);
+
+  // Draw tiles back-to-front (painter's algorithm)
+  for (let gy = 0; gy < ROWS; gy++) {
+    for (let gx = 0; gx < COLS; gx++) {
+      const tileId = map[gy][gx];
+      const iso = toISO(gx, gy);
+      const isHover = mode === 'edit' && hoverCell && hoverCell.gx === gx && hoverCell.gy === gy;
+      drawTile(gx, gy, tileId, isHover);
+    }
+  }
+
+  // Drag ghost
+  if (dragGhost && mode === 'drag') {
+    ctx.save();
+    ctx.globalAlpha = 0.6;
+    const iso = toISO(dragGhost.gx, dragGhost.gy);
+    ctx.translate(iso.x, iso.y);
+    const t = TILES.find(t => t.id === dragGhost.tileId);
+    if (t && t.top) {
+      const hw = TW/2, hh = TH/2;
+      ctx.beginPath();
+      ctx.moveTo(0,-hh); ctx.lineTo(hw,0); ctx.lineTo(0,hh); ctx.lineTo(-hw,0);
+      ctx.closePath();
+      ctx.fillStyle = t.top;
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Characters — draw at their lerped pixel positions
+  const npcISO = toISO(npc.gx, npc.gy);
+  const playerISO = { x: player.px, y: player.py };
+
+  // Sort by y-depth: draw player behind NPC if player is above, etc.
+  const entities = [
+    { iso: npcISO, draw: () => drawCharacter(npcISO.x, npcISO.y, npc.color, false) },
+    { iso: playerISO, draw: () => drawCharacter(player.px, player.py, player.color, true) }
+  ];
+  entities.sort((a, b) => a.iso.y - b.iso.y);
+  entities.forEach(e => e.draw());
+
+  ctx.restore();
+
+  // FPS counter
+  frameCount++;
+  const now = performance.now();
+  if (now - lastFpsTime > 500) {
+    fps = Math.round(frameCount / ((now - lastFpsTime) / 1000));
+    frameCount = 0; lastFpsTime = now;
+    document.getElementById('stat-fps').textContent = fps + ' fps';
+    document.getElementById('stat-zoom').textContent = Math.round(camera.zoom*100) + '%';
+    updateStatusBar();
+  }
+
+  requestAnimationFrame(render);
+}
+
+// ============================================================
+// HOVER CELL
+// ============================================================
+let hoverCell = null;
+
+function updateHover(e) {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const { gx, gy } = toGrid(mx, my);
+  if (gx >= 0 && gx < COLS && gy >= 0 && gy < ROWS) {
+    hoverCell = { gx, gy };
+    const t = TILES.find(t => t.id === map[gy][gx]);
+    const tt = document.getElementById('tooltip');
+    const iso = toISO(gx, gy);
+    const s = worldToScreen(iso.x, iso.y - TH/2);
+    tt.style.display = 'block';
+    tt.style.left = (s.x + 20) + 'px';
+    tt.style.top  = (s.y - 10) + 'px';
+    tt.textContent = `(${gx},${gy}) ${t ? t.emoji+' '+t.label : '?'}`;
+  } else {
+    hoverCell = null;
+    document.getElementById('tooltip').style.display = 'none';
+  }
+}
+
+// ============================================================
+// PLAYER MOVEMENT
+// ============================================================
+let moveAccum = 0;
+const MOVE_DELAY = 160;
+
+function updatePlayer(dt) {
+  if (mode !== 'play') return;
+
+  moveAccum += dt;
+  if (moveAccum < MOVE_DELAY) {
+    // Smooth lerp to target
+    const target = toISO(player.gx, player.gy);
+    player.px += (target.x - player.px) * 0.2;
+    player.py += (target.y - player.py) * 0.2;
+    return;
+  }
+
+  const speed = keys['ShiftLeft'] || keys['ShiftRight'] ? 2 : 1;
+  let dx = 0, dy = 0;
+  if (keys['KeyW'] || keys['ArrowUp'])    { dy -= 1; player.facing = 'n'; }
+  if (keys['KeyS'] || keys['ArrowDown'])  { dy += 1; player.facing = 's'; }
+  if (keys['KeyA'] || keys['ArrowLeft'])  { dx -= 1; player.facing = 'w'; }
+  if (keys['KeyD'] || keys['ArrowRight']) { dx += 1; player.facing = 'e'; }
+
+  if (dx !== 0 || dy !== 0) {
+    moveAccum = 0;
+    const nx = player.gx + dx, ny = player.gy + dy;
+    if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS) {
+      const t = TILES.find(t => t.id === map[ny][nx]);
+      if (t && t.walkable) {
+        player.gx = nx; player.gy = ny;
+        player.moving = true;
+      }
+    }
+  } else {
+    player.moving = false;
+  }
+
+  // Lerp pixel position
+  const target = toISO(player.gx, player.gy);
+  player.px += (target.x - player.px) * 0.25;
+  player.py += (target.y - player.py) * 0.25;
+
+  // Camera follows player in play mode
+  const s = worldToScreen(target.x, target.y);
+  const margin = 80;
+  if (s.x < margin) camera.x += (W/2 - s.x) * 0.08;
+  if (s.x > W-margin) camera.x -= (s.x - W/2) * 0.08;
+  if (s.y < margin) camera.y += (H/2 - s.y) * 0.08;
+  if (s.y > H-margin) camera.y -= (s.y - H/2) * 0.08;
+
+  // NPC interaction
+  const dist = Math.abs(player.gx - npc.gx) + Math.abs(player.gy - npc.gy);
+  if (dist <= 2) triggerNPCDialog();
+
+  document.getElementById('stat-pos').textContent = `Pos: ${player.gx},${player.gy}`;
+}
+
+let lastTime = performance.now();
+function gameLoop() {
+  const now = performance.now();
+  const dt = now - lastTime;
+  lastTime = now;
+  updatePlayer(dt);
+  requestAnimationFrame(gameLoop);
+}
+gameLoop();
+
+// ============================================================
+// NPC DIALOG
+// ============================================================
+let npcCooldown = 0;
+function triggerNPCDialog() {
+  const now = Date.now();
+  if (now - npcCooldown < 3000) return;
+  npcCooldown = now;
+
+  const line = NPC_DIALOGS[npc.dialog % NPC_DIALOGS.length];
+  npc.dialog++;
+
+  // Show speech bubble above NPC
+  const iso = toISO(npc.gx, npc.gy);
+  const s = worldToScreen(iso.x, iso.y);
+  const bubble = document.getElementById('speech-bubble');
+  bubble.textContent = line;
+  bubble.style.display = 'block';
+  bubble.style.left = (s.x - 90) + 'px';
+  bubble.style.top  = (s.y - 120) + 'px';
+
+  document.getElementById('npc-dialog-label').textContent = '🧙 ' + line.slice(0,30) + (line.length > 30 ? '…' : '');
+  document.getElementById('npc-mood').textContent = 'Chatting';
+  document.getElementById('stat-npc').textContent = 'NPC: chatting';
+
+  clearTimeout(speechTimeout);
+  speechTimeout = setTimeout(() => {
+    bubble.style.display = 'none';
+    document.getElementById('npc-mood').textContent = 'Idle';
+    document.getElementById('stat-npc').textContent = 'NPC: idle';
+  }, 3000);
+}
+
+// ============================================================
+// MOUSE / KEYBOARD INPUT
+// ============================================================
+canvas.addEventListener('mousemove', e => {
+  updateHover(e);
+
+  if (mouseBtn === 1) { // middle drag
+    camera.x += e.movementX;
+    camera.y += e.movementY;
+  }
+  if (mouseBtn === 0 && isPainting && mode === 'edit' && hoverCell) {
+    paintTile(hoverCell.gx, hoverCell.gy);
+  }
+
+  if (mode === 'drag' && dragTileId) {
+    dragX = e.clientX;
+    dragY = e.clientY;
+    if (hoverCell) dragGhost = { gx: hoverCell.gx, gy: hoverCell.gy, tileId: dragTileId };
+  }
+});
+
+canvas.addEventListener('mousedown', e => {
+  mouseBtn = e.button;
+  if (e.button === 0 && mode === 'edit') {
+    isPainting = true;
+    if (hoverCell) paintTile(hoverCell.gx, hoverCell.gy);
+  }
+});
+
+canvas.addEventListener('mouseup', e => {
+  if (e.button === 0 && mode === 'drag' && dragTileId && hoverCell) {
+    paintTile(hoverCell.gx, hoverCell.gy, dragTileId);
+  }
+  mouseBtn = -1; isPainting = false;
+  if (mode !== 'drag') dragTileId = null;
+  dragGhost = null;
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.1 : 0.9;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  camera.x = mx - (mx - camera.x) * factor;
+  camera.y = my - (my - camera.y) * factor;
+  camera.zoom = Math.max(0.3, Math.min(2.5, camera.zoom * factor));
+}, { passive: false });
+
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'KeyR') resetCamera();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ============================================================
+// PAINTING
+// ============================================================
+function paintTile(gx, gy, tid) {
+  const id = tid || selectedTile;
+  if (id === 'void') map[gy][gx] = null;
+  else map[gy][gx] = id;
+  updateStatusBar();
+}
+
+function updateStatusBar() {
+  let count = 0;
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (map[r][c]) count++;
+  document.getElementById('stat-tiles').textContent = count + ' tiles';
+}
+
+// ============================================================
+// LEVEL GENERATION
+// ============================================================
+function generateLevel() {
+  const ids = ['grass','grass','grass','stone','sand','path','water','tree'];
+  for (let gy = 0; gy < ROWS; gy++)
+    for (let gx = 0; gx < COLS; gx++) {
+      const noise = Math.sin(gx*0.8)*Math.cos(gy*0.7) + Math.sin((gx+gy)*0.5);
+      if (noise < -0.8) map[gy][gx] = 'water';
+      else if (noise < -0.3) map[gy][gx] = 'sand';
+      else if (noise > 0.9) map[gy][gx] = 'tree';
+      else if (noise > 0.5) map[gy][gx] = 'stone';
+      else map[gy][gx] = 'grass';
+      // Random lava patches
+      if (Math.random() < 0.015) map[gy][gx] = 'lava';
+      if (Math.random() < 0.01) map[gy][gx] = 'ice';
+    }
+  // Central path
+  for (let i = 0; i < COLS; i++) map[ROWS>>1][i] = 'path';
+  updateStatusBar();
+}
+
+function clearLevel() {
+  map = Array.from({length: ROWS}, () => Array(COLS).fill(null));
+  updateStatusBar();
+}
+
+function fillLevel() {
+  map = Array.from({length: ROWS}, () => Array(COLS).fill('grass'));
+  updateStatusBar();
+}
+
+// ============================================================
+// MODE SWITCHING
+// ============================================================
+function setMode(m) {
+  mode = m;
+  document.getElementById('btn-edit').classList.toggle('active', m==='edit');
+  document.getElementById('btn-play').classList.toggle('active', m==='play');
+  document.getElementById('btn-drag').classList.toggle('active', m==='drag');
+  document.getElementById('mode-label').textContent =
+    m === 'edit' ? 'Edit Mode' : m === 'play' ? 'Play Mode' : 'Drag & Drop';
+  document.getElementById('drag-panel').style.display = m === 'drag' ? '' : 'none';
+  document.getElementById('play-controls').style.display = m === 'play' ? '' : 'none';
+  document.getElementById('npc-info').style.display = m === 'play' ? '' : 'none';
+  canvas.style.cursor = m === 'play' ? 'default' : m === 'drag' ? 'grab' : 'crosshair';
+
+  if (m === 'play') {
+    const iso = toISO(player.gx, player.gy);
+    player.px = iso.x; player.py = iso.y;
+  }
+  dragTileId = null; dragGhost = null;
+}
+
+// ============================================================
+// SIDEBAR TILE PALETTE
+// ============================================================
+function buildPalette() {
+  const grid = document.getElementById('tile-palette');
+  grid.innerHTML = '';
+  TILES.forEach(t => {
+    const btn = document.createElement('button');
+    btn.className = 'tile-btn' + (t.id === selectedTile ? ' selected' : '');
+    btn.style.background = t.top ? t.top + '33' : 'rgba(255,0,0,0.1)';
+    btn.innerHTML = `<span>${t.emoji}</span><span style="color:var(--muted)">${t.label}</span>`;
+    btn.onclick = () => {
+      selectedTile = t.id;
+      document.querySelectorAll('.tile-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    };
+    grid.appendChild(btn);
+  });
+
+  // Drag palette
+  const dp = document.getElementById('drag-palette');
+  dp.innerHTML = '';
+  TILES.filter(t => t.id !== 'void').forEach(t => {
+    const el = document.createElement('div');
+    el.style.cssText = `width:44px;height:44px;background:${t.top}33;border:1px solid ${t.top || '#888'};border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:22px;cursor:grab;`;
+    el.textContent = t.emoji;
+    el.title = t.label;
+    el.draggable = true;
+    el.addEventListener('dragstart', e => {
+      dragTileId = t.id;
+      canvas.style.cursor = 'copy';
+    });
+    el.addEventListener('dragend', () => {
+      dragTileId = null;
+      dragGhost = null;
+      canvas.style.cursor = mode === 'drag' ? 'grab' : 'crosshair';
+    });
+    el.addEventListener('mousedown', () => { dragTileId = t.id; });
+    dp.appendChild(el);
+  });
+}
+
+// Also support HTML5 drag-drop onto the canvas
+canvas.addEventListener('dragover', e => {
+  e.preventDefault();
+  updateHover(e);
+  if (hoverCell && dragTileId) dragGhost = { gx: hoverCell.gx, gy: hoverCell.gy, tileId: dragTileId };
+});
+canvas.addEventListener('drop', e => {
+  e.preventDefault();
+  updateHover(e);
+  if (hoverCell && dragTileId) paintTile(hoverCell.gx, hoverCell.gy, dragTileId);
+  dragTileId = null; dragGhost = null;
+});
+
+// ============================================================
+// BOOTSTRAP
+// ============================================================
+window.addEventListener('resize', resize);
+resize();
+generateLevel();
+buildPalette();
+
+// Init player pixel pos
+const initISO = toISO(player.gx, player.gy);
+player.px = initISO.x; player.py = initISO.y;
+
+render();
+updateStatusBar();
+</script>
+</body>
+</html>
