@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IsoEngine</title>
+<style>
+/* ── RESET & VARS ──────────────────────────────────────── */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased}
+:root{
+  --c0:#1a1a1a; /* deepest bg */
+  --c1:#222222; /* panel bg */
+  --c2:#2a2a2a; /* raised surface */
+  --c3:#333333; /* border/divider */
+  --c4:#404040; /* hover surface */
+  --c5:#555555; /* muted text */
+  --c6:#888888; /* secondary text */
+  --c7:#cccccc; /* primary text */
+  --c8:#ffffff; /* emphasis */
+  --accent:#4f9cf9;  /* unity blue */
+  --accent2:#5ac379; /* green */
+  --accent3:#e07b39; /* orange/warn */
+  --accent4:#c47edb; /* purple */
+  --red:#e05555;
+  --r:3px; /* border radius */
+  --font:'Inter',system-ui,sans-serif;
+}
+body{background:var(--c0);color:var(--c7);font-family:var(--font);font-size:13px;overflow:hidden;user-select:none;height:100vh}
+
+/* ── LAYOUT ────────────────────────────────────────────── */
+#shell{display:grid;grid-template-rows:30px 34px 1fr 22px;grid-template-columns:240px 1fr 220px;height:100vh;gap:0}
+
+/* ── TITLE BAR ─────────────────────────────────────────── */
+#titlebar{
+  grid-column:1/-1;background:#1c1c1c;border-bottom:1px solid #111;
+  display:flex;align-items:center;padding:0 10px;gap:8px;
+  font-size:12px;color:var(--c6);
+}
+#titlebar .logo{font-weight:700;font-size:13px;color:var(--c8);letter-spacing:.04em;margin-right:8px}
+#titlebar .logo span{color:var(--accent)}
+.tb-sep{width:1px;height:16px;background:var(--c3);margin:0 4px}
+
+/* ── TOOLBAR ───────────────────────────────────────────── */
+#toolbar{
+  grid-column:1/-1;background:var(--c1);border-bottom:1px solid var(--c3);
+  display:flex;align-items:center;padding:0 8px;gap:3px;
+}
+.tool-group{display:flex;align-items:center;gap:2px;padding:0 4px}
+.tool-group+.tool-group{border-left:1px solid var(--c3)}
+.tbtn{
+  display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:var(--r);
+  border:none;background:transparent;color:var(--c6);cursor:pointer;font-size:12px;
+  font-family:var(--font);transition:background .1s,color .1s;white-space:nowrap;
+}
+.tbtn:hover{background:var(--c4);color:var(--c8)}
+.tbtn.active{background:rgba(79,156,249,.2);color:var(--accent);border:1px solid rgba(79,156,249,.4)}
+.tbtn svg{flex-shrink:0}
+.tbtn-icon{width:26px;height:26px;padding:0;justify-content:center}
+.play-btn{background:rgba(90,195,121,.15);color:var(--accent2);border:1px solid rgba(90,195,121,.3)!important}
+.play-btn:hover{background:rgba(90,195,121,.25)!important;color:#7de09a!important}
+.pause-btn{background:rgba(224,123,57,.15);color:var(--accent3);border:1px solid rgba(224,123,57,.3)!important}
+.pause-btn:hover{background:rgba(224,123,57,.25)!important}
+#toolbar .ml{margin-left:auto}
+#mode-badge{
+  font-size:11px;padding:2px 10px;border-radius:10px;font-weight:600;letter-spacing:.04em;
+  background:rgba(79,156,249,.15);color:var(--accent);border:1px solid rgba(79,156,249,.3);
+}
+
+/* ── LEFT PANEL ─────────────────────────────────────────── */
+#panel-left{
+  background:var(--c1);border-right:1px solid var(--c3);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.panel-header{
+  height:28px;background:var(--c2);border-bottom:1px solid var(--c3);
+  display:flex;align-items:center;padding:0 10px;gap:6px;
+  font-size:11px;font-weight:600;color:var(--c6);text-transform:uppercase;letter-spacing:.06em;
+}
+.panel-header .ph-icon{color:var(--accent);font-size:12px}
+.panel-body{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:10px}
+.panel-body::-webkit-scrollbar{width:5px}
+.panel-body::-webkit-scrollbar-track{background:transparent}
+.panel-body::-webkit-scrollbar-thumb{background:var(--c3);border-radius:3px}
+
+/* Tile palette */
+.palette-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.ptile{
+  aspect-ratio:1;border-radius:var(--r);border:1px solid var(--c3);
+  cursor:pointer;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:1px;font-size:10px;color:var(--c6);
+  transition:all .1s;position:relative;overflow:hidden;
+}
+.ptile:hover{border-color:var(--c5);color:var(--c7);background:var(--c4)!important}
+.ptile.sel{border-color:var(--accent)!important;box-shadow:0 0 0 1px var(--accent);color:var(--accent)!important}
+.ptile .picon{font-size:18px;line-height:1}
+.ptile .sel-dot{
+  position:absolute;top:3px;right:3px;width:5px;height:5px;
+  border-radius:50%;background:var(--accent);display:none;
+}
+.ptile.sel .sel-dot{display:block}
+
+/* Section label */
+.sec{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--c5);margin-bottom:4px}
+
+/* Action buttons */
+.abtn{
+  width:100%;padding:5px 8px;border-radius:var(--r);border:1px solid var(--c3);
+  background:var(--c2);color:var(--c7);cursor:pointer;font-size:12px;
+  font-family:var(--font);text-align:left;display:flex;align-items:center;gap:6px;
+  transition:background .1s;
+}
+.abtn:hover{background:var(--c4)}
+.abtn.danger{color:var(--red);border-color:rgba(224,85,85,.3)}
+.abtn.danger:hover{background:rgba(224,85,85,.1)}
+.btn-row{display:flex;gap:4px}
+.btn-row .abtn{flex:1;justify-content:center}
+
+/* ── VIEWPORT / CANVAS ──────────────────────────────────── */
+#viewport{
+  background:#141414;position:relative;overflow:hidden;
+  border-right:1px solid var(--c3);
+}
+#gameCanvas{display:block;cursor:crosshair}
+#speech-bubble{
+  position:absolute;background:#fff;color:#111;border-radius:8px;
+  padding:6px 10px;font-size:12px;font-weight:600;pointer-events:none;
+  display:none;z-index:20;max-width:160px;text-align:center;
+  box-shadow:0 4px 16px rgba(0,0,0,.5);
+}
+#speech-bubble::after{
+  content:'';position:absolute;bottom:-7px;left:50%;transform:translateX(-50%);
+  border:7px solid transparent;border-top-color:#fff;border-bottom:0;
+}
+#tooltip{
+  position:absolute;background:rgba(0,0,0,.9);border:1px solid var(--c3);
+  border-radius:4px;padding:3px 8px;font-size:11px;color:var(--c7);
+  pointer-events:none;display:none;z-index:10;
+}
+/* Grid overlay badge */
+#grid-info{
+  position:absolute;top:8px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,.6);border:1px solid var(--c3);border-radius:20px;
+  padding:3px 12px;font-size:11px;color:var(--c6);pointer-events:none;
+}
+/* Crosshair coords */
+#crosshair{
+  position:absolute;bottom:8px;left:8px;
+  background:rgba(0,0,0,.6);border:1px solid var(--c3);border-radius:4px;
+  padding:3px 8px;font-size:11px;color:var(--c5);pointer-events:none;
+}
+
+/* ── RIGHT PANEL / INSPECTOR ────────────────────────────── */
+#panel-right{
+  background:var(--c1);display:flex;flex-direction:column;overflow:hidden;
+}
+.inspector-section{border-bottom:1px solid var(--c3);padding:8px 10px}
+.is-title{
+  font-size:11px;font-weight:700;color:var(--c6);text-transform:uppercase;
+  letter-spacing:.06em;display:flex;align-items:center;gap:6px;margin-bottom:8px;
+}
+.is-title::before{content:'';display:block;width:3px;height:11px;border-radius:2px;background:var(--accent)}
+.prop-row{display:flex;align-items:center;margin-bottom:5px;gap:6px}
+.prop-label{font-size:11px;color:var(--c5);width:60px;flex-shrink:0}
+.prop-val{font-size:12px;color:var(--c7);font-weight:500}
+.prop-val.blue{color:var(--accent)}
+.prop-val.green{color:var(--accent2)}
+.prop-val.orange{color:var(--accent3)}
+.prop-val.purple{color:var(--accent4)}
+.prop-val.red{color:var(--red)}
+.tag{display:inline-block;font-size:10px;padding:1px 6px;border-radius:3px;font-weight:600;
+  background:rgba(79,156,249,.15);color:var(--accent);border:1px solid rgba(79,156,249,.25)}
+.tag.green{background:rgba(90,195,121,.15);color:var(--accent2);border-color:rgba(90,195,121,.25)}
+.tag.red{background:rgba(224,85,85,.15);color:var(--red);border-color:rgba(224,85,85,.25)}
+.tag.orange{background:rgba(224,123,57,.15);color:var(--accent3);border-color:rgba(224,123,57,.25)}
+.tag.purple{background:rgba(196,126,219,.15);color:var(--accent4);border-color:rgba(196,126,219,.25)}
+
+/* controls help */
+.ctrl-grid{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;align-items:center}
+.ctrl-key{
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--c2);border:1px solid var(--c3);border-bottom:2px solid var(--c3);
+  border-radius:3px;font-size:10px;font-family:monospace;color:var(--c7);
+  min-width:20px;height:18px;padding:0 4px;
+}
+.ctrl-desc{font-size:11px;color:var(--c6)}
+
+/* NPC dialog box */
+.dialog-box{
+  background:var(--c0);border:1px solid var(--c3);border-radius:var(--r);
+  padding:8px 10px;margin-top:4px;
+}
+.dialog-speaker{font-size:10px;color:var(--accent4);font-weight:700;margin-bottom:3px}
+.dialog-text{font-size:12px;color:var(--c7);line-height:1.5;min-height:32px}
+
+/* ── STATUS BAR ─────────────────────────────────────────── */
+#statusbar{
+  grid-column:1/-1;background:#181818;border-top:1px solid #111;
+  display:flex;align-items:center;padding:0 10px;gap:14px;font-size:11px;color:var(--c5);
+}
+.stat{display:flex;align-items:center;gap:4px}
+.stat-dot{width:6px;height:6px;border-radius:50%}
+#statusbar .ml{margin-left:auto}
+</style>
+</head>
+<body>
+<div id="shell">
+
+<!-- ═══ TITLEBAR ══════════════════════════════════════════ -->
+<div id="titlebar">
+  <span class="logo">Iso<span>Engine</span></span>
+  <div class="tb-sep"></div>
+  <span>v0.1</span>
+  <div class="tb-sep"></div>
+  <span id="tb-file">Untitled Scene</span>
+</div>
+
+<!-- ═══ TOOLBAR ═══════════════════════════════════════════ -->
+<div id="toolbar">
+  <!-- Mode -->
+  <div class="tool-group">
+    <button class="tbtn active" id="btn-edit" onclick="setMode('edit')">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Edit
+    </button>
+    <button class="tbtn" id="btn-play" onclick="setMode('play')">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      Play
+    </button>
+    <button class="tbtn" id="btn-drag" onclick="setMode('drag')">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
+      Drag
+    </button>
+  </div>
+  <!-- Level tools -->
+  <div class="tool-group">
+    <button class="tbtn" onclick="generateLevel()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Generate
+    </button>
+    <button class="tbtn" onclick="fillLevel()">Fill Ground</button>
+    <button class="tbtn" onclick="clearLevel()">Clear</button>
+  </div>
+  <!-- Camera -->
+  <div class="tool-group">
+    <button class="tbtn tbtn-icon" onclick="resetCamera()" title="Reset Camera (R)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+    </button>
+  </div>
+  <div class="ml"></div>
+  <span id="mode-badge">EDIT</span>
+</div>
+
+<!-- ═══ LEFT PANEL ════════════════════════════════════════ -->
+<div id="panel-left">
+  <div class="panel-header">
+    <span class="ph-icon">⬡</span> Tile Palette
+  </div>
+  <div class="panel-body">
+
+    <div>
+      <div class="sec">Terrain</div>
+      <div class="palette-grid" id="tile-palette"></div>
+    </div>
+
+    <div id="drag-hint" style="display:none">
+      <div class="sec">Drag &amp; Drop</div>
+      <div style="font-size:11px;color:var(--c5);line-height:1.6;background:var(--c0);border:1px solid var(--c3);border-radius:var(--r);padding:7px 9px">
+        Drag any tile onto the map. It snaps to the isometric grid automatically.
+      </div>
+      <div id="drag-palette" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px"></div>
+    </div>
+
+    <div>
+      <div class="sec">Level</div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <div class="btn-row">
+          <button class="abtn" onclick="generateLevel()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Random
+          </button>
+          <button class="abtn" onclick="fillLevel()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+            Fill
+          </button>
+        </div>
+        <button class="abtn danger" onclick="clearLevel()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2"/></svg>
+          Clear All
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ VIEWPORT ══════════════════════════════════════════ -->
+<div id="viewport">
+  <canvas id="gameCanvas"></canvas>
+  <div id="speech-bubble"></div>
+  <div id="tooltip"></div>
+  <div id="grid-info">16 × 16  ·  Isometric</div>
+  <div id="crosshair">—</div>
+</div>
+
+<!-- ═══ RIGHT PANEL / INSPECTOR ══════════════════════════ -->
+<div id="panel-right">
+  <div class="panel-header">
+    <span class="ph-icon">☰</span> Inspector
+  </div>
+
+  <!-- Scene objects -->
+  <div class="inspector-section">
+    <div class="is-title">Scene</div>
+    <div class="prop-row"><span class="prop-label">Objects</span><span class="prop-val blue" id="insp-tiles">—</span></div>
+    <div class="prop-row"><span class="prop-label">Mode</span><span class="prop-val" id="insp-mode">Edit</span></div>
+    <div class="prop-row"><span class="prop-label">Zoom</span><span class="prop-val" id="insp-zoom">100%</span></div>
+    <div class="prop-row"><span class="prop-label">FPS</span><span class="prop-val green" id="insp-fps">60</span></div>
+  </div>
+
+  <!-- Player -->
+  <div class="inspector-section">
+    <div class="is-title">Player</div>
+    <div class="prop-row"><span class="prop-label">Position</span><span class="prop-val blue" id="insp-ppos">7, 7</span></div>
+    <div class="prop-row"><span class="prop-label">State</span><span id="insp-pstate"><span class="tag green">Idle</span></span></div>
+    <div class="prop-row"><span class="prop-label">Tile</span><span class="prop-val" id="insp-ptile">grass</span></div>
+  </div>
+
+  <!-- NPC -->
+  <div class="inspector-section">
+    <div class="is-title">NPC — Wizard</div>
+    <div class="prop-row"><span class="prop-label">Position</span><span class="prop-val purple">10, 5</span></div>
+    <div class="prop-row"><span class="prop-label">State</span><span id="insp-npcstate"><span class="tag purple">Idle</span></span></div>
+    <div class="dialog-box">
+      <div class="dialog-speaker">🧙 Last dialog</div>
+      <div class="dialog-text" id="insp-dialog" style="color:var(--c5)">No interaction yet.</div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="inspector-section" id="ctrl-section" style="display:none">
+    <div class="is-title">Controls</div>
+    <div class="ctrl-grid">
+      <div><span class="ctrl-key">W</span><span class="ctrl-key">A</span><span class="ctrl-key">S</span><span class="ctrl-key">D</span></div>
+      <div class="ctrl-desc">Move</div>
+      <div><span class="ctrl-key">⇑ Shift</span></div>
+      <div class="ctrl-desc">Sprint</div>
+      <div><span class="ctrl-key">R</span></div>
+      <div class="ctrl-desc">Reset camera</div>
+      <div><span class="ctrl-key">Scroll</span></div>
+      <div class="ctrl-desc">Zoom</div>
+      <div><span class="ctrl-key">Mid drag</span></div>
+      <div class="ctrl-desc">Pan</div>
+    </div>
+  </div>
+
+  <!-- Selected tile -->
+  <div class="inspector-section">
+    <div class="is-title">Selected Tile</div>
+    <div class="prop-row"><span class="prop-label">Type</span><span class="prop-val" id="insp-seltype">grass</span></div>
+    <div class="prop-row"><span class="prop-label">Walkable</span><span id="insp-selwalk"><span class="tag green">Yes</span></span></div>
+    <div id="hover-tile-info">
+      <div class="prop-row"><span class="prop-label">Hover</span><span class="prop-val" id="insp-hovercoord" style="color:var(--c5)">—</span></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══ STATUS BAR ════════════════════════════════════════ -->
+<div id="statusbar">
+  <div class="stat"><div class="stat-dot" style="background:var(--accent2)"></div><span id="stat-tiles">0 tiles</span></div>
+  <div class="stat"><div class="stat-dot" style="background:var(--accent)"></div><span id="stat-pos">Player: 7,7</span></div>
+  <div class="stat"><div class="stat-dot" style="background:var(--accent4)"></div><span id="stat-npc">NPC: idle</span></div>
+  <div class="stat ml"><span id="stat-zoom">Zoom: 100%</span></div>
+  <div class="stat"><div class="stat-dot" style="background:var(--accent2)"></div><span id="stat-fps">60 fps</span></div>
+</div>
+
+</div><!-- end shell -->
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   TILE DEFINITIONS
+═══════════════════════════════════════════════════════════ */
+const TILES = [
+  {id:'grass', label:'Grass', icon:'🌿', top:'#4a8c3f', side:'#2d5c27', walkable:true},
+  {id:'stone', label:'Stone', icon:'🪨', top:'#6b6b6b', side:'#444',    walkable:true},
+  {id:'water', label:'Water', icon:'💧', top:'#2e7cb8', side:'#1b4f7a', walkable:false, anim:'water'},
+  {id:'sand',  label:'Sand',  icon:'🏖', top:'#c9953c', side:'#8a6220', walkable:true},
+  {id:'tree',  label:'Tree',  icon:'🌲', top:'#2d6e38', side:'#1b4424', walkable:false, tall:true},
+  {id:'path',  label:'Path',  icon:'🛤', top:'#9e7a45', side:'#6b4e28', walkable:true},
+  {id:'lava',  label:'Lava',  icon:'🌋', top:'#c83010', side:'#7a1a08', walkable:false, anim:'lava'},
+  {id:'ice',   label:'Ice',   icon:'❄', top:'#8fcfe8', side:'#5a9ab0', walkable:true},
+  {id:'erase', label:'Erase', icon:'✕',  top:null,      side:null,      walkable:false},
+];
+
+/* ═══════════════════════════════════════════════════════════
+   MAP STATE
+═══════════════════════════════════════════════════════════ */
+const COLS=16, ROWS=16;
+const TW=60, TH=30, TD=16;
+let map = Array.from({length:ROWS},()=>Array(COLS).fill('grass'));
+let selectedTile = 'grass';
+let mode = 'edit';
+let camera = {x:0,y:0,zoom:1};
+let hoverCell = null;
+let dragTileId = null;
+let dragGhost = null;
+let isPainting = false;
+let mouseBtn = -1;
+
+/* ═══════════════════════════════════════════════════════════
+   ENTITIES
+═══════════════════════════════════════════════════════════ */
+const player = {gx:7,gy:7,px:0,py:0,moving:false,moveAccum:0};
+const npc = {gx:10,gy:5,px:0,py:0,wobble:0};
+const NPC_DIALOGS = [
+  "Welcome to IsoEngine!",
+  "Edit the map with Edit mode.",
+  "Drag tiles in Drag mode.",
+  "WASD moves your character.",
+  "Scroll to zoom in/out.",
+  "Press R to reset the camera.",
+  "Try the Generate button!",
+];
+let npcDialogIdx = 0;
+let npcCooldown = 0;
+let activeSpeech = null;
+let speechTimer = null;
+
+/* ═══════════════════════════════════════════════════════════
+   CANVAS
+═══════════════════════════════════════════════════════════ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let W=0, H=0;
+
+function resize(){
+  const vp = document.getElementById('viewport');
+  W = canvas.width  = vp.clientWidth;
+  H = canvas.height = vp.clientHeight;
+}
+
+function resetCamera(){
+  const c = toISO(COLS/2-0.5, ROWS/2-0.5);
+  camera.x = W/2 - c.x;
+  camera.y = H/2 - c.y;
+  camera.zoom = 1;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ISO MATH
+═══════════════════════════════════════════════════════════ */
+function toISO(gx,gy){
+  return {x:(gx-gy)*(TW/2), y:(gx+gy)*(TH/2)};
+}
+function toGrid(sx,sy){
+  const wx=(sx-camera.x)/camera.zoom;
+  const wy=(sy-camera.y)/camera.zoom;
+  return {
+    gx: Math.floor((wx/(TW/2)+wy/(TH/2))/2),
+    gy: Math.floor((wy/(TH/2)-wx/(TW/2))/2)
+  };
+}
+function w2s(wx,wy){
+  return {x:wx*camera.zoom+camera.x, y:wy*camera.zoom+camera.y};
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DRAW TILE
+═══════════════════════════════════════════════════════════ */
+function drawTile(gx,gy,tileId,hilight){
+  const t = TILES.find(t=>t.id===tileId);
+  if(!t||!t.top) return;
+  const {x,y} = toISO(gx,gy);
+  const hw=TW/2, hh=TH/2;
+  ctx.save();
+  ctx.translate(x,y);
+
+  // TOP
+  ctx.beginPath();
+  ctx.moveTo(0,-hh); ctx.lineTo(hw,0); ctx.lineTo(0,hh); ctx.lineTo(-hw,0);
+  ctx.closePath();
+  ctx.fillStyle = t.top;
+  ctx.fill();
+  if(hilight){
+    ctx.strokeStyle='rgba(255,255,255,0.7)';
+    ctx.lineWidth=1.5/camera.zoom;
+    ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,0.12)';
+    ctx.fill();
+  }
+
+  // LEFT face
+  ctx.beginPath();
+  ctx.moveTo(-hw,0); ctx.lineTo(0,hh); ctx.lineTo(0,hh+TD); ctx.lineTo(-hw,TD);
+  ctx.closePath();
+  ctx.fillStyle = shadeHex(t.side, -20);
+  ctx.fill();
+
+  // RIGHT face
+  ctx.beginPath();
+  ctx.moveTo(hw,0); ctx.lineTo(0,hh); ctx.lineTo(0,hh+TD); ctx.lineTo(hw,TD);
+  ctx.closePath();
+  ctx.fillStyle = shadeHex(t.side, 10);
+  ctx.fill();
+
+  // WATER shimmer
+  if(t.anim==='water'){
+    const a = Math.sin(Date.now()/700+gx*0.9+gy*0.7)*0.15+0.15;
+    ctx.beginPath();
+    ctx.moveTo(0,-hh); ctx.lineTo(hw,0); ctx.lineTo(0,hh); ctx.lineTo(-hw,0);
+    ctx.closePath();
+    ctx.fillStyle=`rgba(100,200,255,${a})`;
+    ctx.fill();
+  }
+  // LAVA pulse
+  if(t.anim==='lava'){
+    const a = Math.sin(Date.now()/350+gx+gy)*0.2+0.25;
+    ctx.beginPath();
+    ctx.moveTo(0,-hh); ctx.lineTo(hw,0); ctx.lineTo(0,hh); ctx.lineTo(-hw,0);
+    ctx.closePath();
+    ctx.fillStyle=`rgba(255,180,0,${a})`;
+    ctx.fill();
+  }
+
+  // TREE
+  if(t.tall){
+    // trunk
+    ctx.fillStyle='#3a2010';
+    ctx.fillRect(-3,-hh-2,6,12);
+    // foliage layers
+    [[0,-hh-18,20],[−6,-hh-28,15],[4,-hh-24,13]].forEach(([ox,oy,r])=>{
+      ctx.beginPath(); ctx.arc(ox,oy,r,0,Math.PI*2);
+      ctx.fillStyle='#2a6a35'; ctx.fill();
+    });
+    ctx.beginPath(); ctx.arc(0,-hh-26,12,0,Math.PI*2);
+    ctx.fillStyle='#3a8a45'; ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+/* simple hex shade */
+function shadeHex(hex,amt){
+  const n=parseInt(hex.slice(1),16);
+  const r=Math.max(0,Math.min(255,(n>>16)+amt));
+  const g=Math.max(0,Math.min(255,((n>>8)&0xff)+amt));
+  const b=Math.max(0,Math.min(255,(n&0xff)+amt));
+  return '#'+(r<<16|g<<8|b).toString(16).padStart(6,'0');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DRAW ENTITY  (simplified geometric capsule, Unity-style)
+═══════════════════════════════════════════════════════════ */
+function drawEntity(px,py,color,type,isMoving){
+  const hw=TW/2, hh=TH/2;
+  const bob = isMoving ? Math.sin(Date.now()/110)*2.5 : 0;
+  const base = -hh-TD/2;
+
+  ctx.save();
+  ctx.translate(px, py);
+
+  /* shadow ellipse */
+  ctx.save();
+  ctx.translate(0, base+TD/2-bob*0.3);
+  ctx.scale(1,0.28);
+  ctx.beginPath();ctx.arc(0,0,11,0,Math.PI*2);
+  ctx.fillStyle='rgba(0,0,0,0.35)';ctx.fill();
+  ctx.restore();
+
+  const top = base - 28 + bob;
+
+  /* body capsule — bottom half circle */
+  ctx.beginPath();
+  ctx.arc(0, top+18, 7, 0, Math.PI, false);
+  ctx.lineTo(-7, top+2);
+  ctx.arc(0, top+2, 7, Math.PI, 0, false);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+
+  /* head circle */
+  ctx.beginPath();ctx.arc(0,top-4,8,0,Math.PI*2);
+  ctx.fillStyle = color;ctx.fill();
+
+  /* inner highlight on head */
+  ctx.beginPath();ctx.arc(-2,top-6,4,0,Math.PI*2);
+  ctx.fillStyle='rgba(255,255,255,0.15)';ctx.fill();
+
+  /* eyes */
+  ctx.fillStyle='#fff';
+  ctx.beginPath();ctx.arc(-3,top-4,2.2,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc( 3,top-4,2.2,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#111';
+  ctx.beginPath();ctx.arc(-3,top-4,1.2,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc( 3,top-4,1.2,0,Math.PI*2);ctx.fill();
+
+  /* walking legs */
+  ctx.lineCap='round';
+  if(isMoving){
+    const leg=Math.sin(Date.now()/120)*6;
+    ctx.strokeStyle=color;ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(-3,top+18);ctx.lineTo(-4,top+28+leg);ctx.stroke();
+    ctx.beginPath();ctx.moveTo( 3,top+18);ctx.lineTo( 4,top+28-leg);ctx.stroke();
+  } else {
+    ctx.strokeStyle=color;ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(-3,top+18);ctx.lineTo(-4,top+27);ctx.stroke();
+    ctx.beginPath();ctx.moveTo( 3,top+18);ctx.lineTo( 4,top+27);ctx.stroke();
+  }
+
+  /* NPC wizard hat */
+  if(type==='npc'){
+    ctx.fillStyle='#6b21a8';
+    ctx.beginPath();ctx.ellipse(0,top-11,10,3.5,0,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-6,top-11);ctx.lineTo(0,top-28);ctx.lineTo(6,top-11);
+    ctx.closePath();ctx.fillStyle='#7c3aed';ctx.fill();
+    // star
+    ctx.fillStyle='#fbbf24';ctx.font='8px sans-serif';ctx.textAlign='center';
+    ctx.fillText('★',0,top-18);
+  }
+
+  /* player marker arrow */
+  if(type==='player'){
+    ctx.fillStyle=color;
+    ctx.beginPath();
+    ctx.moveTo(0,top-21);ctx.lineTo(-4,top-28);ctx.lineTo(4,top-28);
+    ctx.closePath();ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RENDER LOOP
+═══════════════════════════════════════════════════════════ */
+let fpsClock=0,fpsCnt=0,fpsVal=60;
+
+function render(){
+  requestAnimationFrame(render);
+  ctx.clearRect(0,0,W,H);
+
+  /* background grid feel */
+  ctx.fillStyle='#141414';
+  ctx.fillRect(0,0,W,H);
+
+  ctx.save();
+  ctx.translate(camera.x,camera.y);
+  ctx.scale(camera.zoom,camera.zoom);
+
+  /* tiles back→front */
+  for(let gy=0;gy<ROWS;gy++){
+    for(let gx=0;gx<COLS;gx++){
+      const tid=map[gy][gx];
+      if(!tid) continue;
+      const hi = mode==='edit' && hoverCell && hoverCell.gx===gx && hoverCell.gy===gy;
+      drawTile(gx,gy,tid,hi);
+    }
+  }
+
+  /* drag ghost */
+  if(dragGhost && mode==='drag'){
+    const t=TILES.find(t=>t.id===dragGhost.tileId);
+    if(t&&t.top){
+      const {x,y}=toISO(dragGhost.gx,dragGhost.gy);
+      const hw=TW/2,hh=TH/2;
+      ctx.save();ctx.translate(x,y);ctx.globalAlpha=0.55;
+      ctx.beginPath();
+      ctx.moveTo(0,-hh);ctx.lineTo(hw,0);ctx.lineTo(0,hh);ctx.lineTo(-hw,0);
+      ctx.closePath();ctx.fillStyle=t.top;ctx.fill();
+      ctx.strokeStyle='#fff';ctx.lineWidth=2/camera.zoom;ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  /* entities — sort by iso-y */
+  const pISO=toISO(player.gx,player.gy);
+  const nISO=toISO(npc.gx,npc.gy);
+  const entities=[
+    {y:nISO.y, draw:()=>drawEntity(nISO.x,nISO.y,'#a855f7','npc',false)},
+    {y:player.py, draw:()=>drawEntity(player.px,player.py,'#3b82f6','player',player.moving)},
+  ];
+  entities.sort((a,b)=>a.y-b.y).forEach(e=>e.draw());
+
+  ctx.restore();
+
+  /* FPS */
+  fpsCnt++;
+  const now=performance.now();
+  if(now-fpsClock>500){
+    fpsVal=Math.round(fpsCnt/((now-fpsClock)/1000));
+    fpsCnt=0;fpsClock=now;
+    document.getElementById('insp-fps').textContent=fpsVal;
+    document.getElementById('stat-fps').textContent=fpsVal+' fps';
+    document.getElementById('insp-zoom').textContent=Math.round(camera.zoom*100)+'%';
+    document.getElementById('stat-zoom').textContent='Zoom: '+Math.round(camera.zoom*100)+'%';
+  }
+
+  /* update speech bubble position */
+  if(activeSpeech){
+    const s=w2s(nISO.x,nISO.y);
+    const bub=document.getElementById('speech-bubble');
+    bub.style.left=(s.x-80)+'px';
+    bub.style.top=(s.y-130)+'px';
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PLAYER UPDATE
+═══════════════════════════════════════════════════════════ */
+let lastT=performance.now();
+const MOVE_MS=150;
+
+function gameLoop(){
+  requestAnimationFrame(gameLoop);
+  const now=performance.now();
+  const dt=now-lastT; lastT=now;
+
+  if(mode!=='play'){
+    player.moving=false;
+    const t=toISO(player.gx,player.gy);
+    player.px+=(t.x-player.px)*0.3;
+    player.py+=(t.y-player.py)*0.3;
+    return;
+  }
+
+  player.moveAccum+=dt;
+  if(player.moveAccum>=MOVE_MS){
+    let dx=0,dy=0;
+    if(keys['KeyW']||keys['ArrowUp'])    dy=-1;
+    if(keys['KeyS']||keys['ArrowDown'])  dy= 1;
+    if(keys['KeyA']||keys['ArrowLeft'])  dx=-1;
+    if(keys['KeyD']||keys['ArrowRight']) dx= 1;
+
+    if(dx||dy){
+      player.moveAccum=0;
+      const nx=player.gx+dx, ny=player.gy+dy;
+      if(nx>=0&&nx<COLS&&ny>=0&&ny<ROWS){
+        const t=TILES.find(t=>t.id===map[ny][nx]);
+        if(t&&t.walkable){
+          player.gx=nx;player.gy=ny;
+          player.moving=true;
+        }
+      }
+    } else { player.moving=false; }
+  }
+
+  // lerp pixel
+  const tgt=toISO(player.gx,player.gy);
+  player.px+=(tgt.x-player.px)*0.22;
+  player.py+=(tgt.y-player.py)*0.22;
+
+  // camera follow
+  const s=w2s(tgt.x,tgt.y);
+  const mg=100;
+  if(s.x<mg) camera.x+=(W/2-s.x)*0.06;
+  if(s.x>W-mg) camera.x-=(s.x-W/2)*0.06;
+  if(s.y<mg) camera.y+=(H/2-s.y)*0.06;
+  if(s.y>H-mg) camera.y-=(s.y-H/2)*0.06;
+
+  // inspector
+  const curTile=map[player.gy][player.gx]||'—';
+  document.getElementById('insp-ppos').textContent=player.gx+', '+player.gy;
+  document.getElementById('insp-ptile').textContent=curTile;
+  document.getElementById('insp-pstate').innerHTML=player.moving
+    ?'<span class="tag orange">Moving</span>'
+    :'<span class="tag green">Idle</span>';
+  document.getElementById('stat-pos').textContent='Player: '+player.gx+','+player.gy;
+
+  // NPC proximity
+  const dist=Math.abs(player.gx-npc.gx)+Math.abs(player.gy-npc.gy);
+  if(dist<=2) tryNPCDialog();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   NPC DIALOG
+═══════════════════════════════════════════════════════════ */
+function tryNPCDialog(){
+  const now=Date.now();
+  if(now-npcCooldown<3500) return;
+  npcCooldown=now;
+  const line=NPC_DIALOGS[npcDialogIdx%NPC_DIALOGS.length];
+  npcDialogIdx++;
+
+  activeSpeech=line;
+  const bub=document.getElementById('speech-bubble');
+  bub.textContent=line;
+  bub.style.display='block';
+
+  document.getElementById('insp-dialog').textContent=line;
+  document.getElementById('insp-npcstate').innerHTML='<span class="tag purple">Talking</span>';
+  document.getElementById('stat-npc').textContent='NPC: talking';
+
+  clearTimeout(speechTimer);
+  speechTimer=setTimeout(()=>{
+    bub.style.display='none';
+    activeSpeech=null;
+    document.getElementById('insp-npcstate').innerHTML='<span class="tag purple">Idle</span>';
+    document.getElementById('stat-npc').textContent='NPC: idle';
+  },3000);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   INPUT
+═══════════════════════════════════════════════════════════ */
+const keys={};
+window.addEventListener('keydown',e=>{
+  keys[e.code]=true;
+  if(e.code==='KeyR') resetCamera();
+});
+window.addEventListener('keyup',e=>{ keys[e.code]=false; });
+
+canvas.addEventListener('mousemove',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const {gx,gy}=toGrid(mx,my);
+  const valid=gx>=0&&gx<COLS&&gy>=0&&gy<ROWS;
+
+  hoverCell = valid?{gx,gy}:null;
+
+  // tooltip
+  const tt=document.getElementById('tooltip');
+  if(valid){
+    const tid=map[gy][gx];
+    const t=TILES.find(t=>t.id===tid);
+    const s=w2s(toISO(gx,gy).x, toISO(gx,gy).y);
+    tt.style.left=(s.x+14)+'px'; tt.style.top=(s.y-12)+'px';
+    tt.textContent=`[${gx},${gy}] ${t?t.icon+' '+t.label:'empty'}`;
+    tt.style.display='block';
+    document.getElementById('crosshair').textContent=`x:${gx}  y:${gy}  tile:${tid||'—'}`;
+    document.getElementById('insp-hovercoord').textContent=gx+', '+gy+' — '+(tid||'empty');
+  } else {
+    tt.style.display='none';
+    document.getElementById('crosshair').textContent='—';
+    document.getElementById('insp-hovercoord').textContent='—';
+  }
+
+  // middle pan
+  if(mouseBtn===1){ camera.x+=e.movementX; camera.y+=e.movementY; }
+
+  // paint drag
+  if(mouseBtn===0&&isPainting&&mode==='edit'&&valid) paintTile(gx,gy);
+
+  // drag ghost
+  if(dragTileId&&mode==='drag'&&valid) dragGhost={gx,gy,tileId:dragTileId};
+  else if(!dragTileId) dragGhost=null;
+});
+
+canvas.addEventListener('mousedown',e=>{
+  mouseBtn=e.button;
+  if(e.button===0&&mode==='edit'){
+    isPainting=true;
+    if(hoverCell) paintTile(hoverCell.gx,hoverCell.gy);
+  }
+});
+canvas.addEventListener('mouseup',e=>{
+  if(e.button===0&&mode==='drag'&&dragTileId&&hoverCell) paintTile(hoverCell.gx,hoverCell.gy,dragTileId);
+  mouseBtn=-1; isPainting=false;
+  dragGhost=null;
+  if(mode!=='drag') dragTileId=null;
+});
+canvas.addEventListener('mouseleave',()=>{ mouseBtn=-1; isPainting=false; });
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+
+canvas.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const f=e.deltaY<0?1.1:0.91;
+  camera.x=mx-(mx-camera.x)*f;
+  camera.y=my-(my-camera.y)*f;
+  camera.zoom=Math.max(0.3,Math.min(2.5,camera.zoom*f));
+},{passive:false});
+
+/* drag from sidebar */
+canvas.addEventListener('dragover',e=>{
+  e.preventDefault();
+  const rect=canvas.getBoundingClientRect();
+  const {gx,gy}=toGrid(e.clientX-rect.left,e.clientY-rect.top);
+  if(gx>=0&&gx<COLS&&gy>=0&&gy<ROWS&&dragTileId) dragGhost={gx,gy,tileId:dragTileId};
+});
+canvas.addEventListener('drop',e=>{
+  e.preventDefault();
+  const rect=canvas.getBoundingClientRect();
+  const {gx,gy}=toGrid(e.clientX-rect.left,e.clientY-rect.top);
+  if(gx>=0&&gx<COLS&&gy>=0&&gy<ROWS&&dragTileId) paintTile(gx,gy,dragTileId);
+  dragTileId=null; dragGhost=null;
+});
+
+/* ═══════════════════════════════════════════════════════════
+   PAINT / LEVEL
+═══════════════════════════════════════════════════════════ */
+function paintTile(gx,gy,tid){
+  const id=tid||selectedTile;
+  map[gy][gx] = id==='erase' ? null : id;
+  updateStats();
+}
+
+function updateStats(){
+  let c=0;
+  for(let r=0;r<ROWS;r++) for(let g=0;g<COLS;g++) if(map[r][g]) c++;
+  document.getElementById('insp-tiles').textContent=c;
+  document.getElementById('stat-tiles').textContent=c+' tiles';
+}
+
+function generateLevel(){
+  for(let gy=0;gy<ROWS;gy++)
+    for(let gx=0;gx<COLS;gx++){
+      const n=Math.sin(gx*.75)*Math.cos(gy*.65)+Math.sin((gx+gy)*.45);
+      if(n<-0.8)        map[gy][gx]='water';
+      else if(n<-0.35)  map[gy][gx]='sand';
+      else if(n>0.95)   map[gy][gx]='tree';
+      else if(n>0.5)    map[gy][gx]='stone';
+      else              map[gy][gx]='grass';
+      if(Math.random()<.012) map[gy][gx]='lava';
+      if(Math.random()<.008) map[gy][gx]='ice';
+    }
+  for(let i=0;i<COLS;i++) map[ROWS>>1][i]='path';
+  updateStats();
+}
+
+function clearLevel(){
+  map=Array.from({length:ROWS},()=>Array(COLS).fill(null));
+  updateStats();
+}
+
+function fillLevel(){
+  map=Array.from({length:ROWS},()=>Array(COLS).fill('grass'));
+  updateStats();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MODE SWITCH
+═══════════════════════════════════════════════════════════ */
+function setMode(m){
+  mode=m;
+  document.getElementById('btn-edit').classList.toggle('active',m==='edit');
+  document.getElementById('btn-play').classList.toggle('active',m==='play');
+  document.getElementById('btn-drag').classList.toggle('active',m==='drag');
+
+  const labels={edit:'EDIT',play:'PLAY',drag:'DRAG'};
+  document.getElementById('mode-badge').textContent=labels[m];
+  document.getElementById('insp-mode').textContent=m.charAt(0).toUpperCase()+m.slice(1);
+
+  document.getElementById('drag-hint').style.display=m==='drag'?'':'none';
+  document.getElementById('ctrl-section').style.display=m==='play'?'block':'none';
+
+  canvas.style.cursor=m==='play'?'default':m==='drag'?'copy':'crosshair';
+  dragTileId=null; dragGhost=null; isPainting=false;
+
+  if(m==='play'){
+    const t=toISO(player.gx,player.gy);
+    player.px=t.x; player.py=t.y;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BUILD TILE PALETTE
+═══════════════════════════════════════════════════════════ */
+function buildPalette(){
+  const grid=document.getElementById('tile-palette');
+  grid.innerHTML='';
+  TILES.forEach(t=>{
+    const btn=document.createElement('button');
+    btn.className='ptile'+(t.id===selectedTile?' sel':'');
+    btn.style.background=t.top?t.top+'22':'rgba(224,85,85,0.1)';
+    btn.innerHTML=`<div class="sel-dot"></div><span class="picon">${t.icon}</span><span>${t.label}</span>`;
+    btn.title=t.label;
+    btn.onclick=()=>{
+      selectedTile=t.id;
+      document.querySelectorAll('.ptile').forEach(b=>b.classList.remove('sel'));
+      btn.classList.add('sel');
+      // update inspector
+      document.getElementById('insp-seltype').textContent=t.label;
+      const w=t.walkable;
+      document.getElementById('insp-selwalk').innerHTML=
+        w!==undefined ? (w?'<span class="tag green">Yes</span>':'<span class="tag red">No</span>') : '—';
+    };
+    // draggable
+    btn.draggable=true;
+    btn.addEventListener('dragstart',()=>dragTileId=t.id);
+    btn.addEventListener('dragend',()=>{ dragTileId=null; dragGhost=null; });
+    btn.addEventListener('mousedown',()=>{ if(mode==='drag') dragTileId=t.id; });
+    grid.appendChild(btn);
+  });
+
+  // drag palette duplicate (for drag panel)
+  const dp=document.getElementById('drag-palette');
+  dp.innerHTML='';
+  TILES.filter(t=>t.id!=='erase').forEach(t=>{
+    const el=document.createElement('div');
+    el.style.cssText=`width:40px;height:40px;background:${t.top||'#333'}33;border:1px solid ${t.top||'#555'};border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:grab;`;
+    el.title=t.label; el.textContent=t.icon; el.draggable=true;
+    el.addEventListener('dragstart',()=>dragTileId=t.id);
+    el.addEventListener('dragend',()=>{ dragTileId=null; dragGhost=null; });
+    el.addEventListener('mousedown',()=>dragTileId=t.id);
+    dp.appendChild(el);
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════════ */
+window.addEventListener('resize',()=>{ resize(); });
+resize();
+resetCamera();
+generateLevel();
+buildPalette();
+updateStats();
+
+// init player/npc pixel pos
+const pi=toISO(player.gx,player.gy);
+player.px=pi.x; player.py=pi.y;
+
+render();
+gameLoop();
+</script>
+</body>
+</html>
